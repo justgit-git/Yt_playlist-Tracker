@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 
 const YT_API_KEY = "AIzaSyClPjT408pwK4Qdy7qIUwKBKnHaXKMAB74";
-const STORAGE_KEY = "yt_tracker_v4";
+const STORAGE_KEY = "yt_tracker_v5";
 
 function loadData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { playlists: {} }; }
@@ -65,12 +65,8 @@ async function fetchMeta(playlistId) {
   return { title:s.title, author:s.channelTitle, thumbnail:s.thumbnails?.medium?.url||s.thumbnails?.default?.url||"" };
 }
 
-// Build day-wise plan: group videos into days based on daily content budget
-// dailyBudgetSec = real wall-clock seconds available per day
-// speed = playback speed (e.g. 1.5)
-// So content you can consume per day = dailyBudgetSec * speed
 function buildDayPlan(videos, dailyWallClockSec, speed) {
-  const contentPerDay = dailyWallClockSec * speed; // actual content seconds per day
+  const contentPerDay = dailyWallClockSec * speed;
   const days = [];
   let current = [], currentSec = 0;
   for (const v of videos) {
@@ -93,152 +89,325 @@ const HOURS_OPTIONS = [0.5, 1, 1.5, 2, 2.5, 3, 4];
 const MINS_OPTIONS = [0, 15, 30, 45];
 
 const css = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+
 *{box-sizing:border-box;margin:0;padding:0}
-body,#root{font-family:'Bricolage Grotesque',sans-serif;background:#080810;color:#e8e4d9;min-height:100vh}
-.app{max-width:900px;margin:0 auto;padding:2rem 1.5rem 5rem}
 
-.header{margin-bottom:2.5rem}
-.header-top{display:flex;align-items:center;gap:12px;margin-bottom:5px}
-.logo{width:34px;height:34px;background:#ff2d2d;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo svg{width:17px;height:17px;fill:white}
-.brand{font-size:23px;font-weight:700;letter-spacing:-0.5px;color:#f0ece0}
-.tagline{font-size:13px;color:#555250;font-family:'DM Mono',monospace}
+body,#root{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  background:#05050f;
+  color:#eae6db;
+  min-height:100vh;
+  background-image: radial-gradient(ellipse at 20% 20%, rgba(255,45,45,0.07) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 80%, rgba(100,40,255,0.05) 0%, transparent 50%);
+}
 
-.add-section{margin-bottom:2rem}
-.input-row{display:flex;gap:10px}
-.url-input{flex:1;background:#0f0f1a;border:1px solid #22222e;color:#e8e4d9;border-radius:10px;padding:13px 16px;font-size:14px;font-family:'DM Mono',monospace;outline:none;transition:border-color .2s}
-.url-input::placeholder{color:#333340}
-.url-input:focus{border-color:#ff2d2d}
-.add-btn{background:#ff2d2d;color:white;border:none;border-radius:10px;padding:13px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif;transition:background .2s,transform .1s;white-space:nowrap;display:flex;align-items:center;gap:7px}
-.add-btn:hover{background:#ff5050}
-.add-btn:active{transform:scale(0.97)}
-.add-btn:disabled{background:#2a1a1a;color:#5a3030;cursor:not-allowed}
-.err{font-size:12px;color:#ff7070;margin-top:8px;font-family:'DM Mono',monospace}
+.app{max-width:960px;margin:0 auto;padding:2.5rem 1.5rem 6rem}
 
-.stats-bar{display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap}
-.stat-pill{background:#0f0f1a;border:1px solid #1e1e2a;border-radius:8px;padding:7px 13px;font-family:'DM Mono',monospace;font-size:12px;color:#555250}
-.stat-pill span{color:#e8e4d9;font-weight:500}
+/* HEADER */
+.header{margin-bottom:3rem;text-align:center;padding-top:1rem}
+.logo-wrap{display:inline-flex;align-items:center;justify-content:center;gap:14px;margin-bottom:1rem}
+.logo{
+  width:48px;height:48px;
+  background:linear-gradient(135deg,#ff2d2d,#ff6b35);
+  border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 24px rgba(255,45,45,0.35);
+  transition:transform .3s ease, box-shadow .3s ease;
+}
+.logo:hover{transform:scale(1.08) rotate(-3deg);box-shadow:0 12px 32px rgba(255,45,45,0.5)}
+.logo svg{width:22px;height:22px;fill:white}
+.brand{font-size:32px;font-weight:800;letter-spacing:-1px;color:#fff;line-height:1}
+.brand span{color:#ff2d2d}
+.tagline{font-size:15px;color:#555258;font-family:'Space Mono',monospace;letter-spacing:0.5px}
 
-.empty{text-align:center;padding:4rem 2rem}
-.empty-icon{font-size:44px;margin-bottom:1rem}
-.empty-title{font-size:17px;font-weight:600;color:#888480;margin-bottom:6px}
-.empty-sub{font-size:12px;color:#3a3835;font-family:'DM Mono',monospace}
+/* ADD SECTION */
+.add-section{margin-bottom:2.5rem}
+.input-wrap{
+  display:flex;gap:12px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px;
+  padding:10px 10px 10px 20px;
+  transition:border-color .3s ease, box-shadow .3s ease;
+}
+.input-wrap:focus-within{
+  border-color:rgba(255,45,45,0.5);
+  box-shadow:0 0 0 4px rgba(255,45,45,0.08);
+}
+.url-input{
+  flex:1;background:transparent;border:none;
+  color:#eae6db;font-size:15px;
+  font-family:'Space Mono',monospace;
+  outline:none;
+}
+.url-input::placeholder{color:#333340;font-size:14px}
+.add-btn{
+  background:linear-gradient(135deg,#ff2d2d,#ff5533);
+  color:white;border:none;border-radius:10px;
+  padding:13px 24px;font-size:15px;font-weight:700;
+  cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;
+  transition:all .25s ease;white-space:nowrap;
+  display:flex;align-items:center;gap:8px;
+  box-shadow:0 4px 16px rgba(255,45,45,0.3);
+}
+.add-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(255,45,45,0.4)}
+.add-btn:active{transform:translateY(0px)}
+.add-btn:disabled{background:#2a1a1a;color:#5a3030;cursor:not-allowed;box-shadow:none;transform:none}
+.err{font-size:13px;color:#ff7070;margin-top:10px;font-family:'Space Mono',monospace;padding-left:4px}
 
-.cards{display:flex;flex-direction:column;gap:1.5rem}
-.card{background:#0c0c16;border:1px solid #1a1a26;border-radius:14px;overflow:hidden;transition:border-color .2s}
-.card:hover{border-color:#2a2a3a}
-.pbar-track{height:2px;background:#1a1a26}
-.pbar-fill{height:100%;background:#ff2d2d;transition:width .5s ease}
+/* STATS BAR */
+.stats-bar{display:flex;gap:12px;margin-bottom:2rem;flex-wrap:wrap}
+.stat-pill{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;padding:10px 16px;
+  font-family:'Space Mono',monospace;font-size:13px;color:#666260;
+  transition:border-color .2s;
+}
+.stat-pill:hover{border-color:rgba(255,45,45,0.3)}
+.stat-pill span{color:#eae6db;font-weight:700}
 
-.card-header{padding:1.25rem 1.5rem;display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none}
-.thumb{width:58px;height:44px;border-radius:7px;object-fit:cover;background:#1a1a26;flex-shrink:0}
-.thumb-ph{width:58px;height:44px;border-radius:7px;background:#1a1a26;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+/* EMPTY STATE */
+.empty{text-align:center;padding:5rem 2rem}
+.empty-icon{font-size:56px;margin-bottom:1.5rem;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.empty-title{font-size:22px;font-weight:700;color:#666260;margin-bottom:8px}
+.empty-sub{font-size:14px;color:#333330;font-family:'Space Mono',monospace}
+
+/* CARDS */
+.cards{display:flex;flex-direction:column;gap:1.75rem}
+.card{
+  background:linear-gradient(145deg,#0d0d1a,#0a0a14);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:20px;overflow:hidden;
+  transition:border-color .3s ease, transform .3s ease, box-shadow .3s ease;
+  animation:slideUp .4s ease forwards;
+}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.card:hover{border-color:rgba(255,45,45,0.2);box-shadow:0 8px 40px rgba(0,0,0,0.4)}
+
+.pbar-track{height:3px;background:rgba(255,255,255,0.05)}
+.pbar-fill{height:100%;background:linear-gradient(90deg,#ff2d2d,#ff6b35);transition:width .6s cubic-bezier(.4,0,.2,1)}
+
+/* CARD HEADER */
+.card-header{
+  padding:1.5rem 1.75rem;
+  display:flex;align-items:center;gap:16px;
+  cursor:pointer;user-select:none;
+  transition:background .2s ease;
+}
+.card-header:hover{background:rgba(255,255,255,0.02)}
+.thumb{
+  width:72px;height:54px;border-radius:10px;
+  object-fit:cover;background:#1a1a26;flex-shrink:0;
+  box-shadow:0 4px 12px rgba(0,0,0,0.4);
+  transition:transform .3s ease;
+}
+.card-header:hover .thumb{transform:scale(1.03)}
+.thumb-ph{
+  width:72px;height:54px;border-radius:10px;
+  background:linear-gradient(135deg,#1a1a26,#0f0f1a);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
 .meta{flex:1;min-width:0}
-.pl-title{font-size:15px;font-weight:600;color:#f0ece0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
-.pl-author{font-size:12px;color:#555250;font-family:'DM Mono',monospace}
-.right-side{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.pl-title{
+  font-size:18px;font-weight:700;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  margin-bottom:5px;letter-spacing:-0.3px;
+}
+.pl-author{font-size:13px;color:#555258;font-family:'Space Mono',monospace}
+.right-side{display:flex;align-items:center;gap:12px;flex-shrink:0}
 .pct-block{text-align:right}
-.pct-num{font-size:16px;font-weight:700;color:#ff2d2d;display:block;line-height:1}
-.pct-sub{font-size:11px;color:#555250;font-family:'DM Mono',monospace}
-.chevron{color:#333340;font-size:15px;transition:transform .2s;flex-shrink:0}
-.chevron.open{transform:rotate(180deg)}
-.del-btn{background:none;border:none;color:#333340;cursor:pointer;padding:5px;border-radius:6px;transition:color .15s,background .15s;display:flex;align-items:center;flex-shrink:0}
-.del-btn:hover{color:#ff7070;background:#1e1010}
+.pct-num{font-size:20px;font-weight:800;color:#ff2d2d;display:block;line-height:1;letter-spacing:-0.5px}
+.pct-sub{font-size:12px;color:#555258;font-family:'Space Mono',monospace;margin-top:2px}
+.chevron{
+  color:#333340;font-size:18px;
+  transition:transform .3s cubic-bezier(.4,0,.2,1), color .2s;
+  flex-shrink:0;
+}
+.chevron.open{transform:rotate(180deg);color:#ff2d2d}
+.del-btn{
+  background:none;border:none;color:#333340;cursor:pointer;
+  padding:7px;border-radius:8px;
+  transition:color .2s,background .2s,transform .2s;
+  display:flex;align-items:center;flex-shrink:0;
+}
+.del-btn:hover{color:#ff7070;background:rgba(255,45,45,0.1);transform:scale(1.1)}
 
-/* Tab switcher */
-.tab-bar{display:flex;gap:2px;padding:12px 1.5rem 0;border-bottom:1px solid #1a1a26}
-.tab-btn{background:none;border:none;color:#555250;font-size:13px;font-family:'Bricolage Grotesque',sans-serif;font-weight:600;cursor:pointer;padding:8px 14px;border-radius:8px 8px 0 0;transition:all .2s;border-bottom:2px solid transparent;margin-bottom:-1px}
-.tab-btn:hover{color:#aaa49a}
-.tab-btn.active{color:#ff2d2d;border-bottom-color:#ff2d2d;background:#0f0f1a}
+/* TABS */
+.tab-bar{
+  display:flex;gap:4px;padding:14px 1.75rem 0;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.tab-btn{
+  background:none;border:none;
+  color:#555258;font-size:14px;font-weight:600;
+  cursor:pointer;padding:10px 16px;
+  border-radius:10px 10px 0 0;
+  transition:all .25s ease;
+  border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+  font-family:'Plus Jakarta Sans',sans-serif;
+}
+.tab-btn:hover{color:#aaa49a;background:rgba(255,255,255,0.03)}
+.tab-btn.active{color:#ff2d2d;border-bottom-color:#ff2d2d;background:rgba(255,45,45,0.05)}
 
-/* Info panel (duration + speed) */
-.info-panel{margin:1rem 1.5rem;background:#0a0a14;border:1px solid #1a1a26;border-radius:10px;overflow:hidden}
-.total-dur-box{padding:.85rem 1.25rem;text-align:center;border-bottom:1px solid #1a1a26}
-.total-dur-label{font-size:10px;letter-spacing:1.5px;color:#555250;font-family:'DM Mono',monospace;text-transform:uppercase;margin-bottom:3px}
-.total-dur-val{font-size:20px;font-weight:700;color:#f0ece0}
-.speed-section{padding:.85rem 1.25rem}
-.section-label{font-size:10px;letter-spacing:1.5px;color:#555250;font-family:'DM Mono',monospace;text-transform:uppercase;margin-bottom:8px}
-.speed-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
-.speed-card{background:#0f0f1a;border:1px solid #1e1e2a;border-radius:8px;padding:7px 4px;text-align:center;cursor:pointer;transition:all .2s}
-.speed-card:hover{border-color:#ff2d2d}
-.speed-card.active{border-color:#ff2d2d;background:#1a0808}
-.speed-lbl{font-size:10px;color:#555250;font-family:'DM Mono',monospace;margin-bottom:3px}
-.speed-time{font-size:12px;font-weight:600;color:#e8e4d9}
+/* INFO PANEL */
+.info-panel{margin:1.25rem 1.75rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;overflow:hidden}
+.total-dur-box{padding:1.25rem;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06)}
+.total-dur-label{font-size:11px;letter-spacing:2px;color:#555258;font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:6px}
+.total-dur-val{font-size:28px;font-weight:800;color:#fff;letter-spacing:-1px}
+.speed-section{padding:1.25rem}
+.section-label{font-size:11px;letter-spacing:2px;color:#555258;font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:12px}
+.speed-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.speed-card{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;padding:10px 6px;text-align:center;
+  cursor:pointer;
+  transition:all .25s ease;
+}
+.speed-card:hover{border-color:rgba(255,45,45,0.4);background:rgba(255,45,45,0.05);transform:translateY(-2px)}
+.speed-card.active{border-color:#ff2d2d;background:rgba(255,45,45,0.1);transform:translateY(-2px);box-shadow:0 4px 16px rgba(255,45,45,0.2)}
+.speed-lbl{font-size:11px;color:#555258;font-family:'Space Mono',monospace;margin-bottom:4px}
+.speed-time{font-size:13px;font-weight:700;color:#eae6db}
 .speed-card.active .speed-time{color:#ff2d2d}
 
-/* Day Plan panel */
-.plan-panel{margin:0 1.5rem 1rem;background:#0a0a14;border:1px solid #1a1a26;border-radius:10px;overflow:hidden}
+/* DAY PLAN */
+.plan-panel{margin:0 1.75rem 1.25rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;overflow:hidden}
+.plan-controls{
+  padding:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.plan-controls-label{font-size:15px;color:#888480;font-weight:600}
+.plan-select{
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.1);
+  color:#eae6db;border-radius:9px;
+  padding:9px 12px;font-size:14px;
+  font-family:'Space Mono',monospace;
+  outline:none;cursor:pointer;
+  transition:all .25s ease;
+}
+.plan-select:focus{border-color:rgba(255,45,45,0.5);background:rgba(255,45,45,0.05)}
 
-.plan-controls{padding:1rem 1.25rem;border-bottom:1px solid #1a1a26;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.plan-controls-label{font-size:13px;color:#888480;margin-right:4px}
-.plan-select{background:#0f0f1a;border:1px solid #22222e;color:#e8e4d9;border-radius:7px;padding:7px 10px;font-size:13px;font-family:'DM Mono',monospace;outline:none;cursor:pointer;transition:border-color .2s}
-.plan-select:focus{border-color:#ff2d2d}
+.plan-summary{
+  padding:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;
+}
+.plan-sum-item{text-align:center;padding:0.5rem}
+.plan-sum-val{font-size:26px;font-weight:800;color:#ff2d2d;display:block;line-height:1;letter-spacing:-1px;margin-bottom:6px}
+.plan-sum-lbl{font-size:11px;color:#555258;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:1px}
 
-.plan-summary{padding:.85rem 1.25rem;border-bottom:1px solid #1a1a26;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
-.plan-sum-item{text-align:center}
-.plan-sum-val{font-size:22px;font-weight:700;color:#ff2d2d;display:block;line-height:1}
-.plan-sum-lbl{font-size:11px;color:#555250;font-family:'DM Mono',monospace}
-.plan-sum-divider{width:1px;height:36px;background:#1a1a26;flex-shrink:0}
-
-/* Day rows */
-.day-row{border-bottom:1px solid #0f0f18;cursor:pointer;transition:background .15s}
+/* DAY ROWS */
+.day-row{border-bottom:1px solid rgba(255,255,255,0.04);transition:background .2s ease}
 .day-row:last-child{border-bottom:none}
-.day-row:hover{background:#0f0f1c}
-.day-row-header{padding:.85rem 1.25rem;display:flex;align-items:center;gap:12px}
-.day-badge{background:#1a0a0a;border:1px solid #2a1515;color:#ff2d2d;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;padding:3px 10px;border-radius:20px;flex-shrink:0;white-space:nowrap}
-.day-badge.done{background:#0a1a0a;border-color:#155215;color:#4caf50}
+.day-row:hover{background:rgba(255,255,255,0.02)}
+.day-row-header{padding:1rem 1.25rem;display:flex;align-items:center;gap:14px;cursor:pointer}
+.day-badge{
+  background:rgba(255,45,45,0.1);
+  border:1px solid rgba(255,45,45,0.25);
+  color:#ff2d2d;font-size:13px;font-weight:700;
+  font-family:'Space Mono',monospace;
+  padding:5px 12px;border-radius:20px;flex-shrink:0;
+  transition:all .25s ease;
+}
+.day-badge.done{background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.3);color:#4ade80}
 .day-info{flex:1;min-width:0}
-.day-title{font-size:14px;font-weight:600;color:#c8c4b8;margin-bottom:2px}
-.day-sub{font-size:11px;color:#444440;font-family:'DM Mono',monospace}
+.day-title{font-size:15px;font-weight:700;color:#c8c4b8;margin-bottom:3px}
+.day-sub{font-size:12px;color:#444440;font-family:'Space Mono',monospace}
 .day-pbar-wrap{width:100px;flex-shrink:0}
-.day-pbar-track{height:4px;background:#1a1a26;border-radius:2px}
-.day-pbar-fill{height:100%;background:#ff2d2d;border-radius:2px;transition:width .4s}
-.day-pbar-fill.done{background:#4caf50}
-.day-chevron{color:#2a2a3a;font-size:13px;transition:transform .2s;flex-shrink:0}
-.day-chevron.open{transform:rotate(180deg)}
+.day-pbar-track{height:5px;background:rgba(255,255,255,0.06);border-radius:3px}
+.day-pbar-fill{height:100%;background:linear-gradient(90deg,#ff2d2d,#ff6b35);border-radius:3px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.day-pbar-fill.done{background:linear-gradient(90deg,#4ade80,#22c55e)}
+.day-chevron{color:#2a2a3a;font-size:14px;transition:transform .3s cubic-bezier(.4,0,.2,1);flex-shrink:0}
+.day-chevron.open{transform:rotate(180deg);color:#ff2d2d}
 
-/* Videos inside a day */
-.day-videos{background:#070710;border-top:1px solid #0f0f18}
-.vrow{display:flex;align-items:center;gap:10px;padding:9px 1.25rem;transition:background .15s;cursor:pointer;border-bottom:1px solid #0a0a14}
-.vrow:last-child{border-bottom:none}
-.vrow:hover{background:#0e0e1c}
-.vrow.done .vtitle{color:#3a3835;text-decoration:line-through;text-decoration-color:#2a2825}
-.vthumb{width:48px;height:36px;border-radius:5px;object-fit:cover;background:#1a1a26;flex-shrink:0}
-.vthumb-ph{width:48px;height:36px;border-radius:5px;background:#1a1a26;flex-shrink:0}
-.check{width:18px;height:18px;border-radius:50%;border:1.5px solid #252535;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s;background:transparent}
-.check.done{background:#ff2d2d;border-color:#ff2d2d}
-.check svg{width:9px;height:9px;fill:none;stroke:white;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
-.vnum{font-size:11px;color:#333340;font-family:'DM Mono',monospace;min-width:24px;text-align:right;flex-shrink:0}
-.vtitle{flex:1;font-size:13px;color:#9a9490;line-height:1.35;transition:color .15s}
-.vdur{font-size:11px;color:#444440;font-family:'DM Mono',monospace;flex-shrink:0}
-.yt-link{color:#2a2a3a;font-size:13px;flex-shrink:0;text-decoration:none;transition:color .15s;display:flex;align-items:center}
-.yt-link:hover{color:#ff2d2d}
-
-/* All videos tab */
+/* VIDEOS */
+.day-videos{background:rgba(0,0,0,0.2);border-top:1px solid rgba(255,255,255,0.04)}
 .all-videos-wrap{padding:4px 0}
-.search-bar{padding:8px 1.5rem 4px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #0c0c16}
-.search-input{flex:1;background:transparent;border:none;outline:none;font-size:13px;color:#aaa49a;font-family:'DM Mono',monospace;padding:4px 0}
+.search-bar{
+  padding:10px 1.75rem 6px;
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+}
+.search-input{
+  flex:1;background:transparent;border:none;outline:none;
+  font-size:14px;color:#aaa49a;
+  font-family:'Space Mono',monospace;padding:4px 0;
+}
 .search-input::placeholder{color:#333340}
-.video-count-badge{font-size:11px;font-family:'DM Mono',monospace;color:#444440;padding:6px 1.5rem 8px}
+.video-count-badge{font-size:12px;font-family:'Space Mono',monospace;color:#444440;padding:8px 1.75rem}
+.vrow{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 1.75rem;
+  transition:background .2s ease;
+  cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,0.03);
+}
+.vrow:last-child{border-bottom:none}
+.vrow:hover{background:rgba(255,255,255,0.03)}
+.vrow.done .vtitle{color:#3a3835;text-decoration:line-through;text-decoration-color:#2a2825}
+.vthumb{width:52px;height:38px;border-radius:7px;object-fit:cover;background:#1a1a26;flex-shrink:0;transition:transform .2s}
+.vrow:hover .vthumb{transform:scale(1.04)}
+.vthumb-ph{width:52px;height:38px;border-radius:7px;background:#1a1a26;flex-shrink:0}
+.check{
+  width:22px;height:22px;border-radius:50%;
+  border:2px solid rgba(255,255,255,0.12);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  transition:all .25s cubic-bezier(.4,0,.2,1);background:transparent;
+}
+.check:hover{border-color:rgba(255,45,45,0.5)}
+.check.done{background:linear-gradient(135deg,#ff2d2d,#ff5533);border-color:transparent;box-shadow:0 2px 8px rgba(255,45,45,0.4)}
+.check svg{width:10px;height:10px;fill:none;stroke:white;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.vnum{font-size:12px;color:#333340;font-family:'Space Mono',monospace;min-width:28px;text-align:right;flex-shrink:0}
+.vtitle{flex:1;font-size:14px;color:#9a9490;line-height:1.4;transition:color .2s}
+.vrow:hover .vtitle{color:#c8c4b8}
+.vdur{font-size:12px;color:#444440;font-family:'Space Mono',monospace;flex-shrink:0}
+.yt-link{
+  color:#2a2a3a;font-size:14px;flex-shrink:0;
+  text-decoration:none;
+  transition:color .2s, transform .2s;
+  display:flex;align-items:center;
+}
+.yt-link:hover{color:#ff2d2d;transform:scale(1.2)}
 .action-btns{display:flex;gap:6px}
-.act-btn{background:none;border:none;color:#555250;font-size:11px;cursor:pointer;font-family:'DM Mono',monospace;padding:3px 7px;border-radius:4px;transition:color .15s}
-.act-btn:hover{color:#ff2d2d}
+.act-btn{
+  background:none;border:none;color:#555258;font-size:12px;
+  cursor:pointer;font-family:'Space Mono',monospace;
+  padding:4px 8px;border-radius:6px;
+  transition:all .2s ease;
+}
+.act-btn:hover{color:#ff2d2d;background:rgba(255,45,45,0.08)}
 
-.loading-row{padding:2rem;display:flex;flex-direction:column;align-items:center;gap:8px}
-.spinner{width:20px;height:20px;border:2px solid #1e1e2a;border-top-color:#ff2d2d;border-radius:50%;animation:spin .7s linear infinite}
+/* LOADING */
+.loading-row{padding:2.5rem;display:flex;flex-direction:column;align-items:center;gap:10px}
+.spinner{
+  width:24px;height:24px;
+  border:2.5px solid rgba(255,255,255,0.08);
+  border-top-color:#ff2d2d;
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{font-size:13px;color:#555250;font-family:'DM Mono',monospace}
-.loading-sub{font-size:11px;color:#333340;font-family:'DM Mono',monospace}
+.loading-text{font-size:14px;color:#555258;font-family:'Space Mono',monospace}
+.loading-sub{font-size:12px;color:#333340;font-family:'Space Mono',monospace}
 `;
 
-function Ring({ pct, size = 42 }) {
-  const r=(size-6)/2, c=2*Math.PI*r, d=(pct/100)*c;
+function Ring({ pct, size = 48 }) {
+  const r=(size-7)/2, c=2*Math.PI*r, d=(pct/100)*c;
   return (
     <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1a1a26" strokeWidth={3}/>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#ff2d2d" strokeWidth={3}
-        strokeDasharray={`${d} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .5s ease"}}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={3.5}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="url(#rg)" strokeWidth={3.5}
+        strokeDasharray={`${d} ${c}`} strokeLinecap="round" style={{transition:"stroke-dasharray .6s cubic-bezier(.4,0,.2,1)"}}/>
+      <defs>
+        <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#ff2d2d"/>
+          <stop offset="100%" stopColor="#ff6b35"/>
+        </linearGradient>
+      </defs>
     </svg>
   );
 }
@@ -247,7 +416,7 @@ function InfoTab({ videos }) {
   const [activeSpeed, setActiveSpeed] = useState(1.5);
   const totalSec = videos.reduce((s,v)=>s+v.durationSec, 0);
   return (
-    <div className="info-panel" style={{margin:"1rem 1.5rem"}}>
+    <div className="info-panel" style={{margin:"1.25rem 1.75rem"}}>
       <div className="total-dur-box">
         <div className="total-dur-label">Total Duration</div>
         <div className="total-dur-val">{fmtSec(totalSec)}</div>
@@ -275,17 +444,12 @@ function DayPlanTab({ videos, watched, onToggle }) {
 
   const dailyWallClockSec = (hours * 3600) + (mins * 60);
   const days = dailyWallClockSec > 0 ? buildDayPlan(videos, dailyWallClockSec, speed) : [];
-
-  const totalSec = videos.reduce((s,v)=>s+v.durationSec,0);
   const watchedIds = new Set(Object.keys(watched));
   const remainingSec = videos.filter(v=>!watchedIds.has(v.id)).reduce((s,v)=>s+v.durationSec,0);
   const daysLeft = days.filter(day=>!day.every(v=>watchedIds.has(v.id))).length;
 
-  const toggleDay = (i) => setOpenDays(o=>({...o,[i]:!o[i]}));
-
   return (
     <div className="plan-panel">
-      {/* Controls */}
       <div className="plan-controls">
         <span className="plan-controls-label">Watch</span>
         <select className="plan-select" value={hours} onChange={e=>setHours(Number(e.target.value))}>
@@ -300,30 +464,25 @@ function DayPlanTab({ videos, watched, onToggle }) {
         </select>
       </div>
 
-      {/* Summary */}
       <div className="plan-summary">
         <div className="plan-sum-item">
           <span className="plan-sum-val">{days.length}</span>
           <span className="plan-sum-lbl">Total Days</span>
         </div>
-        <div className="plan-sum-divider"/>
         <div className="plan-sum-item">
           <span className="plan-sum-val">{daysLeft}</span>
           <span className="plan-sum-lbl">Days Left</span>
         </div>
-        <div className="plan-sum-divider"/>
         <div className="plan-sum-item">
-          <span className="plan-sum-val">{fmtSec(remainingSec)}</span>
+          <span className="plan-sum-val" style={{fontSize:18}}>{fmtSec(remainingSec)}</span>
           <span className="plan-sum-lbl">Content Left</span>
         </div>
-        <div className="plan-sum-divider"/>
         <div className="plan-sum-item">
-          <span className="plan-sum-val">{hours>0||mins>0?fmtSec(((hours*3600)+(mins*60))):"—"}</span>
+          <span className="plan-sum-val" style={{fontSize:18}}>{dailyWallClockSec>0?fmtSec(dailyWallClockSec):"—"}</span>
           <span className="plan-sum-lbl">Per Day</span>
         </div>
       </div>
 
-      {/* Day rows */}
       {days.map((day, i) => {
         const dayWatched = day.filter(v=>watchedIds.has(v.id)).length;
         const dayDone = dayWatched === day.length;
@@ -332,13 +491,11 @@ function DayPlanTab({ videos, watched, onToggle }) {
         const isOpen = !!openDays[i];
         return (
           <div key={i} className="day-row">
-            <div className="day-row-header" onClick={()=>toggleDay(i)}>
-              <div className={`day-badge${dayDone?" done":""}`}>
-                {dayDone ? "✓ Done" : `Day ${i+1}`}
-              </div>
+            <div className="day-row-header" onClick={()=>setOpenDays(o=>({...o,[i]:!o[i]}))}>
+              <div className={`day-badge${dayDone?" done":""}`}>{dayDone?"✓ Done":`Day ${i+1}`}</div>
               <div className="day-info">
                 <div className="day-title">{day.length} video{day.length!==1?"s":""}</div>
-                <div className="day-sub">{fmtSec(daySec)} of content · {dayWatched}/{day.length} watched</div>
+                <div className="day-sub">{fmtSec(daySec)} · {dayWatched}/{day.length} watched</div>
               </div>
               <div className="day-pbar-wrap">
                 <div className="day-pbar-track">
@@ -356,17 +513,12 @@ function DayPlanTab({ videos, watched, onToggle }) {
                       <div className={`check${done?" done":""}`}>
                         {done&&<svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>}
                       </div>
-                      {v.thumbnail
-                        ? <img src={v.thumbnail} className="vthumb" alt=""/>
-                        : <div className="vthumb-ph"/>
-                      }
+                      {v.thumbnail?<img src={v.thumbnail} className="vthumb" alt=""/>:<div className="vthumb-ph"/>}
                       <span className="vnum">{v.position}</span>
                       <span className="vtitle">{v.title}</span>
                       <span className="vdur">{v.duration}</span>
-                      <a href={`https://youtube.com/watch?v=${v.id}`}
-                        className="yt-link" target="_blank" rel="noopener noreferrer"
-                        onClick={e=>e.stopPropagation()} title="Watch on YouTube">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <a href={`https://youtube.com/watch?v=${v.id}`} className="yt-link" target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
                           <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                         </svg>
@@ -390,17 +542,14 @@ function AllVideosTab({ videos, watched, onToggle, onMarkAll }) {
   return (
     <div className="all-videos-wrap">
       <div className="search-bar">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555250" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555258" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input className="search-input" placeholder="Search videos..." value={q} onChange={e=>setQ(e.target.value)}/>
         <div className="action-btns">
           <button className="act-btn" onClick={()=>onMarkAll(true)}>mark all ✓</button>
           <button className="act-btn" onClick={()=>onMarkAll(false)}>clear</button>
         </div>
       </div>
-      <div className="video-count-badge">
-        {filtered.length} video{filtered.length!==1?"s":""}{q?` matching "${q}"`:""}
-        {" · "}{Object.keys(watched).length} watched
-      </div>
+      <div className="video-count-badge">{filtered.length} video{filtered.length!==1?"s":""}{q?` matching "${q}"`:""}  ·  {Object.keys(watched).length} watched</div>
       {filtered.map(v=>{
         const done=watchedIds.has(v.id);
         return (
@@ -408,17 +557,12 @@ function AllVideosTab({ videos, watched, onToggle, onMarkAll }) {
             <div className={`check${done?" done":""}`}>
               {done&&<svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>}
             </div>
-            {v.thumbnail
-              ? <img src={v.thumbnail} className="vthumb" alt=""/>
-              : <div className="vthumb-ph"/>
-            }
+            {v.thumbnail?<img src={v.thumbnail} className="vthumb" alt=""/>:<div className="vthumb-ph"/>}
             <span className="vnum">{v.position}</span>
             <span className="vtitle">{v.title}</span>
             <span className="vdur">{v.duration}</span>
-            <a href={`https://youtube.com/watch?v=${v.id}`}
-              className="yt-link" target="_blank" rel="noopener noreferrer"
-              onClick={e=>e.stopPropagation()} title="Watch on YouTube">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <a href={`https://youtube.com/watch?v=${v.id}`} className="yt-link" target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
                 <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
               </svg>
@@ -445,8 +589,8 @@ export default function App() {
   const handleAdd = async () => {
     setErr("");
     const pid = extractPlaylistId(input.trim());
-    if(!pid){setErr("Paste a valid YouTube playlist URL (needs ?list=...)");return;}
-    if(db.playlists[pid]){setErr("Already added!");return;}
+    if(!pid){setErr("⚠ Paste a valid YouTube playlist URL (needs ?list=...)");return;}
+    if(db.playlists[pid]){setErr("⚠ Already added!");return;}
     setAdding(true);
     try {
       const meta = await fetchMeta(pid);
@@ -456,7 +600,7 @@ export default function App() {
       setExpanded(e=>({...e,[pid]:true}));
       setActiveTab(t=>({...t,[pid]:"plan"}));
       loadVideos(pid, newDb);
-    } catch(e){setErr(e.message||"Failed. Make sure the playlist is public.");}
+    } catch(e){setErr("⚠ "+( e.message||"Failed. Make sure the playlist is public."));}
     finally{setAdding(false);}
   };
 
@@ -500,40 +644,42 @@ export default function App() {
       <style>{css}</style>
       <div className="app">
         <header className="header">
-          <div className="header-top">
-            <div className="logo"><svg viewBox="0 0 24 24"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg></div>
-            <span className="brand">playlist tracker</span>
+          <div className="logo-wrap">
+            <div className="logo">
+              <svg viewBox="0 0 24 24"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
+            </div>
+            <div className="brand">playlist<span>tracker</span></div>
           </div>
-          <p className="tagline">// track any youtube playlist · day-wise plan · saves progress</p>
+          <p className="tagline">// track · plan · complete any youtube playlist</p>
         </header>
 
         <div className="add-section">
-          <div className="input-row">
-            <input className="url-input" placeholder="https://youtube.com/playlist?list=PLxxxxxx"
+          <div className="input-wrap">
+            <input className="url-input" placeholder="Paste YouTube playlist URL here..."
               value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>e.key==="Enter"&&!adding&&handleAdd()}/>
             <button className="add-btn" onClick={handleAdd} disabled={adding||!input.trim()}>
               {adding
-                ?<><div className="spinner" style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white"}}/>Adding...</>
+                ?<><div className="spinner" style={{width:16,height:16,border:"2.5px solid rgba(255,255,255,0.3)",borderTopColor:"white"}}/>Loading...</>
                 :<>+ Add Playlist</>}
             </button>
           </div>
-          {err&&<p className="err">⚠ {err}</p>}
+          {err&&<p className="err">{err}</p>}
         </div>
 
         {playlists.length>0&&(
           <div className="stats-bar">
             <div className="stat-pill"><span>{playlists.length}</span> playlist{playlists.length!==1?"s":""}</div>
-            <div className="stat-pill"><span>{totalWatched}</span> / <span>{totalVids}</span> watched</div>
-            {totalVids>0&&<div className="stat-pill"><span>{Math.round((totalWatched/totalVids)*100)}%</span> overall</div>}
+            <div className="stat-pill"><span>{totalWatched}</span> / <span>{totalVids}</span> videos watched</div>
+            {totalVids>0&&<div className="stat-pill"><span>{Math.round((totalWatched/totalVids)*100)}%</span> overall complete</div>}
           </div>
         )}
 
         {playlists.length===0
           ?<div className="empty">
-              <div className="empty-icon">▶</div>
-              <p className="empty-title">No playlists yet</p>
-              <p className="empty-sub">Paste any public YouTube playlist URL above to start tracking</p>
+              <div className="empty-icon">🎬</div>
+              <p className="empty-title">No playlists added yet</p>
+              <p className="empty-sub">Paste any public YouTube playlist URL above</p>
             </div>
           :<div className="cards">
               {playlists.map(pl=>{
@@ -550,7 +696,7 @@ export default function App() {
                     <div className="card-header" onClick={()=>setExpanded(e=>({...e,[pl.id]:!e[pl.id]}))}>
                       {pl.thumbnail
                         ?<img src={pl.thumbnail} className="thumb" alt=""/>
-                        :<div className="thumb-ph"><svg width="20" height="20" viewBox="0 0 24 24" fill="#333340"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg></div>
+                        :<div className="thumb-ph"><svg width="24" height="24" viewBox="0 0 24 24" fill="#333340"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg></div>
                       }
                       <div className="meta">
                         <div className="pl-title">{pl.title}</div>
@@ -563,8 +709,8 @@ export default function App() {
                         </div>
                         <Ring pct={pct}/>
                         <span className={`chevron${isOpen?" open":""}`}>▾</span>
-                        <button className="del-btn" onClick={e=>{e.stopPropagation();deletePl(pl.id);}} title="Remove">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <button className="del-btn" onClick={e=>{e.stopPropagation();deletePl(pl.id);}}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
                             <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
                           </svg>
@@ -590,9 +736,9 @@ export default function App() {
                                   </button>
                                 ))}
                               </div>
-                              {tab==="plan" && <DayPlanTab videos={videos} watched={pl.watched} onToggle={vid=>toggleVideo(pl.id,vid)}/>}
-                              {tab==="duration" && <InfoTab videos={videos}/>}
-                              {tab==="all" && <AllVideosTab videos={videos} watched={pl.watched} onToggle={vid=>toggleVideo(pl.id,vid)} onMarkAll={done=>markAll(pl.id,done)}/>}
+                              {tab==="plan"&&<DayPlanTab videos={videos} watched={pl.watched} onToggle={vid=>toggleVideo(pl.id,vid)}/>}
+                              {tab==="duration"&&<InfoTab videos={videos}/>}
+                              {tab==="all"&&<AllVideosTab videos={videos} watched={pl.watched} onToggle={vid=>toggleVideo(pl.id,vid)} onMarkAll={done=>markAll(pl.id,done)}/>}
                             </>
                     )}
                   </div>
